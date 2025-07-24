@@ -1,0 +1,42 @@
+{
+  "name": "k1-starknet-adapter",
+  "version": "1.0.0",
+  "description": "Node.js backend for K1 Starknet-Lightning atomic swaps",
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "dev": "ts-node src/index.ts",
+    "lint": "eslint src/**/*.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@atomiqlabs/chain-starknet": "^3.0.0-beta.8",
+    "@atomiqlabs/sdk": "^4.0.1",
+    "@atomiqlabs/storage-sqlite": "^1.0.0",
+    "cors": "^2.8.5",
+    "dotenv": "^16.3.1",
+    "express": "^4.18.2",
+    "helmet": "^7.1.0",
+    "starknet": "^7.6.4"
+  },
+  "devDependencies": {
+    "@types/cors": "^2.8.17",
+    "@types/express": "^4.17.21",
+    "@types/node": "^20.10.0",
+    "@typescript-eslint/eslint-plugin": "^6.13.1",
+    "@typescript-eslint/parser": "^6.13.1",
+    "eslint": "^8.54.0",
+    "ts-node": "^10.9.1",
+    "typescript": "^5.3.2"
+  },
+  "keywords": [
+    "starknet",
+    "lightning",
+    "atomic-swap",
+    "k1",
+    "atomiq"
+  ],
+  "author": "",
+  "license": "ISC"
+}
