@@ -1,28 +1,19 @@
 import {
-    AbstractSigner,
-    BitcoinNetwork,
-    FeeType,
-    FromBTCLNSwapState,
-    FromBTCSwapState,
-    IBitcoinWallet,
-    isLNURLPay,
-    isLNURLWithdraw,
-    LNURLPay,
-    LNURLWithdraw,
-    SCToken,
-    SingleAddressBitcoinWallet,
-    SpvFromBTCSwapState,
-    SwapperFactory,
-    ToBTCSwapState
+  AbstractSigner,
+  IBitcoinWallet,
+  SingleAddressBitcoinWallet,
+  SwapperFactory,
 } from "@atomiqlabs/sdk";
 import {
-    RpcProviderWithRetries,
-    StarknetInitializer,
-    StarknetInitializerType,
-    StarknetKeypairWallet,
-    StarknetSigner
+  RpcProviderWithRetries,
+  StarknetInitializer,
+  StarknetKeypairWallet,
+  StarknetSigner,
 } from "@atomiqlabs/chain-starknet";
-import { SqliteStorageManager, SqliteUnifiedStorage } from "@atomiqlabs/storage-sqlite";
+import {
+  SqliteStorageManager,
+  SqliteUnifiedStorage,
+} from "@atomiqlabs/storage-sqlite";
 import { AtomicSwapConfig, validateConfig } from "./atomicConfig";
 
 /**
@@ -40,7 +31,7 @@ export class AtomicSwapper {
   constructor(config: AtomicSwapConfig) {
     this.config = config;
     validateConfig(config);
-    
+
     // Initialize SwapperFactory with Starknet support
     // Using type assertion to work around SDK typing issues
     this.factory = new (SwapperFactory as any)([StarknetInitializer]);
@@ -58,44 +49,55 @@ export class AtomicSwapper {
     try {
       // Initialize Starknet RPC provider
       const starknetRpc = new RpcProviderWithRetries({
-        nodeUrl: this.config.starknetRpcUrl
+        nodeUrl: this.config.starknetRpcUrl,
       });
 
       // Create the swapper instance
       this.swapper = this.factory.newSwapper({
         chains: {
           STARKNET: {
-            rpcUrl: starknetRpc
-          }
+            rpcUrl: starknetRpc,
+          },
         },
         bitcoinNetwork: this.config.bitcoinNetwork,
-        
+
         // Use SQLite storage for Node.js environment
-        swapStorage: (chainId: string) => new SqliteUnifiedStorage(`CHAIN_${chainId}.sqlite3`),
-        chainStorageCtor: (name: string) => new SqliteStorageManager(`STORE_${name}.sqlite3`),
-        
+        swapStorage: (chainId: string) =>
+          new SqliteUnifiedStorage(`CHAIN_${chainId}.sqlite3`),
+        chainStorageCtor: (name: string) =>
+          new SqliteStorageManager(`STORE_${name}.sqlite3`),
+
         // Optional configuration
         pricingFeeDifferencePPM: this.config.maxPricingDifferencePPM,
         getRequestTimeout: this.config.getRequestTimeout,
         postRequestTimeout: this.config.postRequestTimeout,
-        
-        // Custom endpoints if provided
-        ...(this.config.intermediaryUrl && { intermediaryUrl: this.config.intermediaryUrl }),
-        ...(this.config.registryUrl && { registryUrl: this.config.registryUrl }),
-        ...(this.config.trustedIntermediaryUrl && { defaultTrustedIntermediaryUrl: this.config.trustedIntermediaryUrl }),
+
+        // Custom endpoints if provided - commented out to use SDK defaults
+        ...(this.config.intermediaryUrl && {
+          intermediaryUrl: this.config.intermediaryUrl,
+        }),
+        // ...(this.config.registryUrl && { registryUrl: this.config.registryUrl }),
+        // ...(this.config.trustedIntermediaryUrl && { defaultTrustedIntermediaryUrl: this.config.trustedIntermediaryUrl }),
       });
 
       // Initialize the swapper
       await this.swapper.init();
-      
+
       // Create Starknet signer if credentials are provided
-      if (this.config.starknetPrivateKey && this.config.starknetAccountAddress) {
+      if (
+        this.config.starknetPrivateKey &&
+        this.config.starknetAccountAddress
+      ) {
         await this.initializeStarknetSigner();
       }
-      
+
       this.isInitialized = true;
     } catch (error) {
-      throw new Error(`Failed to initialize atomic swapper: ${error instanceof Error ? error.message : String(error)}`);
+      throw new Error(
+        `Failed to initialize atomic swapper: ${
+          error instanceof Error ? error.message : String(error)
+        }`
+      );
     }
   }
 
@@ -103,29 +105,38 @@ export class AtomicSwapper {
    * Initialize Starknet signer
    */
   private async initializeStarknetSigner(): Promise<void> {
-    if (!this.config.starknetPrivateKey || !this.config.starknetAccountAddress) {
+    if (
+      !this.config.starknetPrivateKey ||
+      !this.config.starknetAccountAddress
+    ) {
       throw new Error("Starknet credentials not configured");
     }
 
     try {
       // Create Starknet RPC provider
       const starknetRpc = new RpcProviderWithRetries({
-        nodeUrl: this.config.starknetRpcUrl
+        nodeUrl: this.config.starknetRpcUrl,
       });
-      
+
       // Create Starknet signer from private key
       this.starknetSigner = new StarknetSigner(
         new StarknetKeypairWallet(starknetRpc, this.config.starknetPrivateKey)
       );
     } catch (error) {
-      throw new Error(`Failed to initialize Starknet signer: ${error instanceof Error ? error.message : String(error)}`);
+      throw new Error(
+        `Failed to initialize Starknet signer: ${
+          error instanceof Error ? error.message : String(error)
+        }`
+      );
     }
   }
 
   /**
    * Initialize Bitcoin wallet (optional - for BTC -> Starknet swaps)
    */
-  private async initializeBitcoinWallet(privateKey?: string): Promise<SingleAddressBitcoinWallet> {
+  private async initializeBitcoinWallet(
+    privateKey?: string
+  ): Promise<SingleAddressBitcoinWallet> {
     if (!privateKey) {
       privateKey = SingleAddressBitcoinWallet.generateRandomPrivateKey();
     }
@@ -153,7 +164,7 @@ export class AtomicSwapper {
     if (!this.isInitialized) {
       throw new Error("Swapper not initialized");
     }
-    
+
     return this.swapper.getSwapLimits(srcToken, dstToken);
   }
 
@@ -186,7 +197,11 @@ export class AtomicSwapper {
 
       return swap;
     } catch (error) {
-      throw new Error(`Failed to create swap quote: ${error instanceof Error ? error.message : String(error)}`);
+      throw new Error(
+        `Failed to create swap quote: ${
+          error instanceof Error ? error.message : String(error)
+        }`
+      );
     }
   }
 
@@ -204,26 +219,43 @@ export class AtomicSwapper {
     }
 
     try {
-      const balance = await this.swapper.Utils.getSpendableBalance(signerToUse, token);
+      const balance = await this.swapper.Utils.getSpendableBalance(
+        signerToUse,
+        token
+      );
       return balance;
     } catch (error) {
-      throw new Error(`Failed to get balance: ${error instanceof Error ? error.message : String(error)}`);
+      throw new Error(
+        `Failed to get balance: ${
+          error instanceof Error ? error.message : String(error)
+        }`
+      );
     }
   }
 
   /**
    * Get Bitcoin spendable balance
    */
-  async getBitcoinSpendableBalance(address: string, destinationChain: string = "STARKNET") {
+  async getBitcoinSpendableBalance(
+    address: string,
+    destinationChain: string = "STARKNET"
+  ) {
     if (!this.isInitialized) {
       throw new Error("Swapper not initialized");
     }
 
     try {
-      const result = await this.swapper.Utils.getBitcoinSpendableBalance(address, destinationChain);
+      const result = await this.swapper.Utils.getBitcoinSpendableBalance(
+        address,
+        destinationChain
+      );
       return result;
     } catch (error) {
-      throw new Error(`Failed to get Bitcoin balance: ${error instanceof Error ? error.message : String(error)}`);
+      throw new Error(
+        `Failed to get Bitcoin balance: ${
+          error instanceof Error ? error.message : String(error)
+        }`
+      );
     }
   }
 
@@ -239,7 +271,11 @@ export class AtomicSwapper {
       const result = await this.swapper.Utils.parseAddress(address);
       return result;
     } catch (error) {
-      throw new Error(`Failed to parse address: ${error instanceof Error ? error.message : String(error)}`);
+      throw new Error(
+        `Failed to parse address: ${
+          error instanceof Error ? error.message : String(error)
+        }`
+      );
     }
   }
 
@@ -254,7 +290,11 @@ export class AtomicSwapper {
     try {
       return await this.swapper.getRefundableSwaps("STARKNET", address);
     } catch (error) {
-      throw new Error(`Failed to get refundable swaps: ${error instanceof Error ? error.message : String(error)}`);
+      throw new Error(
+        `Failed to get refundable swaps: ${
+          error instanceof Error ? error.message : String(error)
+        }`
+      );
     }
   }
 
@@ -269,7 +309,11 @@ export class AtomicSwapper {
     try {
       return await this.swapper.getClaimableSwaps("STARKNET", address);
     } catch (error) {
-      throw new Error(`Failed to get claimable swaps: ${error instanceof Error ? error.message : String(error)}`);
+      throw new Error(
+        `Failed to get claimable swaps: ${
+          error instanceof Error ? error.message : String(error)
+        }`
+      );
     }
   }
 
@@ -284,7 +328,11 @@ export class AtomicSwapper {
     try {
       return await this.swapper.getSwapById(id);
     } catch (error) {
-      throw new Error(`Failed to get swap by ID: ${error instanceof Error ? error.message : String(error)}`);
+      throw new Error(
+        `Failed to get swap by ID: ${
+          error instanceof Error ? error.message : String(error)
+        }`
+      );
     }
   }
 
