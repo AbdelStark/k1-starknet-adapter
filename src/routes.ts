@@ -1,6 +1,7 @@
 import { Router, Request, Response } from 'express';
 import { AtomicSwapService } from './atomicSwapSimple';
 import { BalanceService } from './balanceService';
+import { transferWBTCToK1 } from './transferService';
 import { InvoiceDTO, ResultDTO, AtomicSwapRequest } from './types';
 
 const router = Router();
@@ -129,5 +130,23 @@ router.get('/api/atomic-swap/status/:swapId', async (req: Request, res: Response
     });
   }
 });
+
+// WBTC transfer route
+router.post('/api/transfer', async (req: Request, res: Response) => {
+  const { amount } = req.body;
+
+  if (!amount || isNaN(Number(amount))) {
+    return res.status(400).json({ success: false, message: 'Invalid or missing amount' });
+  }
+
+  try {
+    const txHash = await transferWBTCToK1(amount);
+    return res.json({ success: true, txHash });
+  } catch (err: any) {
+    console.error('Transfer error:', err);
+    return res.status(500).json({ success: false, message: 'Transfer failed', details: err.message });
+  }
+});
+
 
 export default router;

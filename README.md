@@ -6,6 +6,7 @@ A Node.js backend in TypeScript that handles atomic swaps between Starknet and L
 
 - REST API compatible with K1 backend
 - Atomic swaps between Starknet and Lightning Network
+- Transfer WBTC between Starknet wallets (ATM → K1)
 - TypeScript implementation with proper error handling
 - Health check endpoint
 - Configurable via environment variables
@@ -27,6 +28,7 @@ npm install
 ```bash
 STARKNET_PRIVATE_KEY=0x...
 STARKNET_ACCOUNT_ADDRESS=0x...
+STARKNET_K1_ADDRESS=0x...
 NWC_CONNECTION_STRING=nostr+walletconnect://...
 STARKNET_RPC_URL=https://starknet-mainnet.public.blastapi.io/rpc/v0_8
 BITCOIN_NETWORK=mainnet
@@ -57,6 +59,8 @@ npm start
 GET /health
 ```
 
+---
+
 ### WBTC Balance Query
 ```bash
 GET /balance/:address
@@ -73,8 +77,8 @@ Response:
   "success": true,
   "message": "WBTC balance retrieved successfully",
   "data": {
-    "address": "0x03641aa25b8de4a4d5ac185c72b124546666f2ad2354c9627b6565830fdea408",
-    "tokenAddress": "0x03fe2b97c1fd336e750087d68b9b867997fd64a2661ff3ca5a7c771641e8e7ac",
+    "address": "0x...",
+    "tokenAddress": "0x...",
     "tokenSymbol": "WBTC",
     "balance": "0",
     "balanceFormatted": "0",
@@ -84,13 +88,32 @@ Response:
 }
 ```
 
-**Response Fields:**
-- `balance`: Raw balance in WBTC's smallest unit (8 decimals)
-- `balanceFormatted`: Human-readable balance (e.g., "1.5" for 1.5 WBTC)
-- `balanceInSats`: Balance converted to satoshis (1 WBTC = 100,000,000 sats)
-- `decimals`: Token decimal places (8 for WBTC)
-- `tokenAddress`: WBTC contract address on Starknet
-- `tokenSymbol`: Token symbol ("WBTC")
+---
+
+### WBTC Transfer to K1 Wallet
+
+```bash
+POST /api/transfer
+Content-Type: application/json
+
+{
+  "amount": "0.000001"
+}
+```
+
+Transfers WBTC from the ATM wallet (configured via `STARKNET_PRIVATE_KEY`) to the K1 wallet (`STARKNET_K1_ADDRESS`) on Starknet.
+
+Successful response:
+```json
+{
+  "success": true,
+  "txHash": "0x..."
+}
+```
+
+This endpoint is used to move WBTC collected from an operator-owned ATM into a central wallet managed by K1, which may then be used to fulfill Lightning or Bitcoin network payouts.
+
+---
 
 ### Invoice Processing (K1 Compatible)
 ```bash
@@ -102,6 +125,8 @@ Content-Type: application/json
   "address": "lnbc1000n1p..."
 }
 ```
+
+---
 
 ### Atomic Swap Endpoints
 
@@ -133,13 +158,15 @@ Content-Type: application/json
 GET /api/atomic-swap/status/:swapId
 ```
 
+---
+
 ## Architecture
 
-- **Express.js** - Web framework
-- **TypeScript** - Type safety
-- **Atomiq SDK** - Atomic swap functionality
-- **Starknet.js** - Starknet blockchain interaction
-- **SQLite** - Local storage for swap data
+- **Express.js** – Web framework
+- **TypeScript** – Type safety
+- **Atomiq SDK** – Atomic swap functionality
+- **Starknet.js** – Starknet blockchain interaction
+- **SQLite** – Local storage for swap data
 
 ## Current Implementation Status
 
@@ -156,11 +183,11 @@ To complete the full integration:
 ## Development
 
 ### Scripts
-- `npm run build` - Build TypeScript
-- `npm run dev` - Start development server
-- `npm start` - Start production server
-- `npm run lint` - Run linting
-- `npm run typecheck` - Type checking
+- `npm run build` – Build TypeScript
+- `npm run dev` – Start development server
+- `npm start` – Start production server
+- `npm run lint` – Run linting
+- `npm run typecheck` – Type checking
 
 ### File Structure
 ```
@@ -169,5 +196,7 @@ src/
 ├── config.ts             # Configuration management
 ├── routes.ts             # API route definitions
 ├── types.ts              # TypeScript type definitions
-└── atomicSwapSimple.ts   # Simplified atomic swap service
+├── atomicSwapSimple.ts   # Simplified atomic swap service
+├── balanceService.ts     # WBTC balance lookup
+└── transferService.ts    # WBTC transfer from ATM to K1 wallet
 ```

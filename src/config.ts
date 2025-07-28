@@ -7,6 +7,7 @@ export const config = {
   starknetRpcUrl: process.env.STARKNET_RPC_URL || 'https://starknet-mainnet.public.blastapi.io/rpc/v0_8',
   starknetPrivateKey: process.env.STARKNET_PRIVATE_KEY || '',
   starknetAccountAddress: process.env.STARKNET_ACCOUNT_ADDRESS || '',
+  starknetK1Address: process.env.STARKNET_K1_ADDRESS || '',
   bitcoinNetwork: process.env.BITCOIN_NETWORK || 'mainnet',
   nwcConnectionString: process.env.NWC_CONNECTION_STRING || '',
   atomiqIntermediaryUrl: process.env.ATOMIQ_INTERMEDIARY_URL || 'https://84-32-32-132.sslip.io:24000',
