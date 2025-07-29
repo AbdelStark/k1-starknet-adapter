@@ -15,6 +15,7 @@ import {
   SqliteUnifiedStorage,
 } from "@atomiqlabs/storage-sqlite";
 import { AtomicSwapConfig, validateConfig } from "./atomicConfig";
+import { createBraavosAccountFromEnv } from './braavos/SimpleBraavosAdapter';
 
 /**
  * Wrapper class for AtomiqLabs SDK with Starknet integration
@@ -88,7 +89,12 @@ export class AtomicSwapper {
         this.config.starknetPrivateKey &&
         this.config.starknetAccountAddress
       ) {
-        await this.initializeStarknetSigner();
+        // Use Braavos signer if configured, otherwise use standard signer
+        if (this.config.useBraavosAccount) {
+          await this.initializeBraavosFromEnv();
+        } else {
+          await this.initializeStarknetSigner();
+        }
       }
 
       this.isInitialized = true;
@@ -125,6 +131,111 @@ export class AtomicSwapper {
     } catch (error) {
       throw new Error(
         `Failed to initialize Starknet signer: ${
+          error instanceof Error ? error.message : String(error)
+        }`
+      );
+    }
+  }
+
+  /**
+   * Initialize Braavos Starknet signer for existing Braavos accounts
+   * 
+   * This method allows using an existing Braavos account instead of creating
+   * a new OpenZeppelin account. This is useful when you already have funds
+   * and tokens in a Braavos wallet.
+   * 
+   * @param {string} privateKey - Private key of the existing Braavos account
+   * @param {string} accountAddress - Address of the existing Braavos account
+   * @returns {Promise<void>}
+   * 
+   * @example
+   * ```typescript
+   * const swapper = new AtomicSwapper(config);
+   * await swapper.initializeBraavosStarknetSigner(
+   *   '0x1234...', // Your Braavos private key
+   *   '0x5678...'  // Your Braavos account address
+   * );
+   * await swapper.initialize();
+   * ```
+   */
+  async initializeBraavosStarknetSigner(
+    privateKey?: string,
+    accountAddress?: string
+  ): Promise<void> {
+    // Use provided keys or fall back to config/env vars
+    const braavosPrivateKey = privateKey || this.config.starknetPrivateKey;
+    const braavosAccountAddress = accountAddress || this.config.starknetAccountAddress;
+
+    if (!braavosPrivateKey || !braavosAccountAddress) {
+      throw new Error(
+        "Braavos credentials not provided. Please provide privateKey and accountAddress parameters " +
+        "or set STARKNET_PRIVATE_KEY and STARKNET_ACCOUNT_ADDRESS environment variables."
+      );
+    }
+
+    try {
+      // Create Starknet RPC provider
+      const starknetRpc = new RpcProviderWithRetries({
+        nodeUrl: this.config.starknetRpcUrl,
+      });
+
+      // Create a Braavos account instance and wrap it with StarknetKeypairWallet
+      const braavosWallet = new StarknetKeypairWallet(starknetRpc, braavosPrivateKey);
+      
+      // Create the StarknetSigner with the Braavos wallet
+      this.starknetSigner = new StarknetSigner(braavosWallet);
+
+      console.log(`✅ Braavos account initialized: ${braavosAccountAddress}`);
+    } catch (error) {
+      throw new Error(
+        `Failed to initialize Braavos Starknet signer: ${
+          error instanceof Error ? error.message : String(error)
+        }`
+      );
+    }
+  }
+
+  /**
+   * Initialize Braavos signer from environment variables
+   * 
+   * Convenience method to initialize a Braavos signer using the same
+   * environment variables as the regular signer, but for Braavos accounts.
+   * 
+   * @returns {Promise<void>}
+   * 
+   * @example
+   * ```typescript
+   * // Set environment variables:
+   * // STARKNET_PRIVATE_KEY=0x1234...  (your Braavos private key)
+   * // STARKNET_ACCOUNT_ADDRESS=0x5678...  (your Braavos account address)
+   * 
+   * const swapper = new AtomicSwapper(config);
+   * await swapper.initializeBraavosFromEnv();
+   * await swapper.initialize();
+   * ```
+   */
+  async initializeBraavosFromEnv(): Promise<void> {
+    try {
+      // Create Starknet RPC provider
+      const starknetRpc = new RpcProviderWithRetries({
+        nodeUrl: this.config.starknetRpcUrl,
+      });
+
+      // Create Braavos wallet from environment variables
+      const privateKey = process.env.STARKNET_PRIVATE_KEY;
+      const accountAddress = process.env.STARKNET_ACCOUNT_ADDRESS;
+
+      if (!privateKey || !accountAddress) {
+        throw new Error('STARKNET_PRIVATE_KEY and STARKNET_ACCOUNT_ADDRESS are required');
+      }
+
+      const braavosWallet = new StarknetKeypairWallet(starknetRpc, privateKey);
+      this.starknetSigner = new StarknetSigner(braavosWallet);
+
+      console.log(`✅ Braavos account initialized from environment: ${accountAddress}`);
+    } catch (error) {
+      throw new Error(
+        `Failed to initialize Braavos signer from environment: ${
           error instanceof Error ? error.message : String(error)
         }`
       );

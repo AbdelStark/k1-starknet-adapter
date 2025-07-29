@@ -17,6 +17,7 @@
     "test:e2e": "jest tests/e2e",
     "test:endpoint": "ts-node scripts/ts/test-endpoint.ts",
     "test:production": "ts-node scripts/ts/test-production-endpoints.ts",
+    "braavos-example": "ts-node scripts/ts/braavos-example.ts",
     "atomic-swap-test": "ts-node src/atomicSwapTest.ts"
   },
   "dependencies": {

@@ -27,6 +27,9 @@ export interface AtomicSwapConfig {
   
   // Security configuration
   enableTestnet: boolean;
+  
+  // Account type configuration
+  useBraavosAccount?: boolean;
 }
 
 /**
@@ -45,7 +48,8 @@ export function createDefaultConfig(): AtomicSwapConfig {
     postRequestTimeout: parseInt(process.env.POST_REQUEST_TIMEOUT || "10000"),
     maxPricingDifferencePPM: BigInt(process.env.MAX_PRICING_DIFFERENCE_PPM || "20000"),
     defaultGasAmount: process.env.DEFAULT_GAS_AMOUNT ? BigInt(process.env.DEFAULT_GAS_AMOUNT) : BigInt("1000000000000000000"), // 1 STRK
-    enableTestnet: process.env.ENABLE_TESTNET === "true"
+    enableTestnet: process.env.ENABLE_TESTNET === "true",
+    useBraavosAccount: process.env.USE_BRAAVOS_ACCOUNT === "true"
   };
 }
 
