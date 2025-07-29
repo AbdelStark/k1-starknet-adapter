@@ -117,7 +117,8 @@ export async function isBraavosAccount(
     
     // Known Braavos class hashes (these may change over time)
     const knownBraavosHashes = [
-      '0x03131fa018d520a037686ce3efddeab8f28895662f019ca3ca18a626650f7d1e',
+      '0x3d16c7a9a60b0593bd202f660a28c5d76e0403601d9ccc7e4fa253b6a70c201', // Base class
+      '0x3957f9f5a1cbfe918cedc2015c85200ca51a5f7506ecb6de98a5207b759bf8a', // v1.2.0
       // Add other known Braavos class hashes here
     ];
 

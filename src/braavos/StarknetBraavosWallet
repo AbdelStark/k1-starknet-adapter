@@ -1,0 +1,45 @@
+import {
+  Account,
+  CallData,
+  DeployAccountContractPayload,
+  ec,
+  hash,
+  Provider,
+} from "starknet";
+import { toHex } from "../Utils";
+import { Buffer } from "buffer";
+import { BraavosAccountClassHash } from "./deployBraavos";
+
+//Braavos Account wallet
+export class StarknetBraavosWallet extends Account {
+  public readonly publicKey: string;
+
+  constructor(provider: Provider, privateKey: string) {
+    const publicKey = ec.starkCurve.getStarkKey(toHex(privateKey));
+    // Calculate future address of the account
+    const BraavosConstructorCallData = CallData.compile({ publicKey });
+    const BraavoscontractAddress = hash.calculateContractAddressFromHash(
+      publicKey,
+      BraavosAccountClassHash,
+      BraavosConstructorCallData,
+      0
+    );
+    super(provider, BraavoscontractAddress, privateKey, "1");
+    this.publicKey = publicKey;
+  }
+
+  public getDeploymentData(): DeployAccountContractPayload {
+    return {
+      classHash: BraavosAccountClassHash,
+      constructorCalldata: CallData.compile({ publicKey: this.publicKey }),
+      addressSalt: this.publicKey,
+      contractAddress: this.address,
+    };
+  }
+
+  public static generateRandomPrivateKey(): string {
+    return (
+      "0x" + Buffer.from(ec.starkCurve.utils.randomPrivateKey()).toString("hex")
+    );
+  }
+}

@@ -24,6 +24,7 @@
     "@atomiqlabs/chain-starknet": "^3.1.0-beta.15",
     "@atomiqlabs/sdk": "^6.0.0",
     "@atomiqlabs/storage-sqlite": "^3.0.0",
+    "@starknet-io/types-js": "^0.8.4",
     "@types/uuid": "^10.0.0",
     "cors": "^2.8.5",
     "dotenv": "^16.3.1",

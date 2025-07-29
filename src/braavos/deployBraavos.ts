@@ -1,356 +1,283 @@
-/**
- * Braavos Account Deployment and Management
- * 
- * This module provides functionality to deploy and manage Braavos accounts
- * on Starknet, handling the specific signature requirements and proxy setup
- * that Braavos accounts need.
- * 
- * Braavos accounts are more complex than standard OpenZeppelin accounts:
- * - They use a proxy pattern for upgradability
- * - They require specific signature formats
- * - They have custom deployment procedures
- * 
- * @fileoverview Braavos Account Management
- * @author K1 Team
- * @version 1.0.0
- */
+// Collection of functions for Braavos account v1.2.0 creation.
+// Coded with Starknet.js v7.1.0
+// Handle Rpc0.8V3
 
 import {
-  Account,
-  Call,
-  CallData,
-  Contract,
-  RpcProvider,
-  constants,
   ec,
   hash,
   num,
+  constants,
+  CallData,
   stark,
-  transaction,
-  types,
-  EstimateFeeResponse,
-  InvokeFunctionResponse,
-} from 'starknet';
+  BigNumberish,
+  type RpcProvider,
+  type DeployAccountSignerDetails,
+  type V3DeployAccountSignerDetails,
+  type V3InvocationsSignerDetails,
+  type UniversalDetails,
+  type V3TransactionDetails,
+  type EstimateFeeResponse,
+} from "starknet";
+import {
+  type DeployContractResponse,
+  type Calldata,
+  type DeployAccountContractPayload,
+  type EstimateFeeDetails,
+  type CairoVersion,
+  type DeployAccountContractTransaction,
+} from "starknet";
+import {
+  EDAMode,
+  EDataAvailabilityMode,
+  ETransactionVersion,
+  ETransactionVersion3,
+  type ResourceBounds,
+} from "@starknet-io/types-js";
 
-// Braavos account class hashes (these are the deployed class hashes on Starknet)
-const BRAAVOS_ACCOUNT_CLASS_HASH = '0x03131fa018d520a037686ce3efddeab8f28895662f019ca3ca18a626650f7d1e';
-const BRAAVOS_PROXY_CLASS_HASH = '0x03131fa018d520a037686ce3efddeab8f28895662f019ca3ca18a626650f7d1e';
+export const BraavosBaseClassHash =
+  "0x3d16c7a9a60b0593bd202f660a28c5d76e0403601d9ccc7e4fa253b6a70c201";
+export const BraavosAccountClassHash =
+  "0x3957f9f5a1cbfe918cedc2015c85200ca51a5f7506ecb6de98a5207b759bf8a"; // v1.2.0
 
-// Braavos-specific constants
-const BRAAVOS_SIGNER_TYPE = '0x03131fa018d520a037686ce3efddeab8f28895662f019ca3ca18a626650f7d1e';
+type CalcV3DeployAccountTxHashArgs = {
+  contractAddress: BigNumberish;
+  classHash: BigNumberish;
+  compiledConstructorCalldata: Calldata;
+  salt: BigNumberish;
+  version: `${ETransactionVersion3}`;
+  chainId: constants.StarknetChainId;
+  nonce: BigNumberish;
+  nonceDataAvailabilityMode: EDAMode;
+  feeDataAvailabilityMode: EDAMode;
+  resourceBounds: ResourceBounds;
+  tip: BigNumberish;
+  paymasterData: BigNumberish[];
+};
 
-/**
- * Calculate the address of a Braavos account before deployment
- * 
- * This function computes the deterministic address that will be assigned
- * to a Braavos account when deployed with the given private key.
- * 
- * @param {string} privateKey - The private key for the account (hex string)
- * @returns {string} The computed account address
- * 
- * @example
- * ```typescript
- * const privateKey = '0x1234...';
- * const address = calculateAddressBraavos(privateKey);
- * console.log('Future account address:', address);
- * ```
- */
-export function calculateAddressBraavos(privateKey: string): string {
-  // Convert private key to public key
-  const publicKey = ec.starkCurve.getStarkKey(privateKey);
-  
-  // Braavos account constructor calldata
-  const constructorCalldata = CallData.compile({
-    public_key: publicKey,
-    multisig_threshold: 1,
-  });
-  
-  // Calculate the account address using Starknet's contract address calculation
-  const accountAddress = hash.calculateContractAddressFromHash(
-    publicKey, // salt (uses public key as salt for Braavos)
-    BRAAVOS_ACCOUNT_CLASS_HASH,
-    constructorCalldata,
-    0 // deployer address (0 for CREATE opcode)
+export function getBraavosSignature(
+  details: DeployAccountSignerDetails,
+  privateKeyBraavos: BigNumberish
+): string[] {
+  let txnHash: string = "";
+  const det = details as V3DeployAccountSignerDetails;
+  const v3det = stark.v3Details(det, "0.8.1");
+  txnHash = hash.calculateDeployAccountTransactionHash({
+    contractAddress: det.contractAddress,
+    classHash: det.classHash,
+    compiledConstructorCalldata: det.constructorCalldata,
+    salt: det.addressSalt,
+    version: det.version,
+    chainId: det.chainId,
+    nonce: det.nonce,
+    nonceDataAvailabilityMode: stark.intDAM(v3det.nonceDataAvailabilityMode),
+    feeDataAvailabilityMode: stark.intDAM(v3det.feeDataAvailabilityMode),
+    tip: v3det.tip,
+    paymasterData: v3det.paymasterData,
+    resourceBounds: v3det.resourceBounds,
+  } as CalcV3DeployAccountTxHashArgs);
+
+  // braavos v1.0.0 specific deployment signature :
+  // sig[0: 1] - r,s from stark sign on txn_hash
+  // sig[2] - actual impl hash - the impl hash we will replace class into
+  // sig[3: n - 2] -  auxiliary data - hws public key, multisig, daily withdrawal limit etc
+  // sig[n - 2] -  chain_id - guarantees aux sig is not replayed from other chain ids
+  // sig[n - 1: n] -  r,s from stark sign on poseidon_hash(sig[2: n-2])
+
+  const parsedOtherSigner = Array(9).fill(0);
+  const { r, s } = ec.starkCurve.sign(txnHash, num.toHex(privateKeyBraavos));
+  const txnHashPoseidon = hash.computePoseidonHashOnElements([
+    BraavosAccountClassHash,
+    ...parsedOtherSigner,
+    details.chainId,
+  ]);
+  const { r: rPoseidon, s: sPoseidon } = ec.starkCurve.sign(
+    txnHashPoseidon,
+    num.toHex(privateKeyBraavos)
   );
-  
-  return accountAddress;
+  const signature = [
+    r.toString(),
+    s.toString(),
+    BigInt(BraavosAccountClassHash).toString(),
+    ...parsedOtherSigner.map((e) => e.toString()),
+    BigInt(details.chainId).toString(),
+    rPoseidon.toString(),
+    sPoseidon.toString(),
+  ];
+  return signature;
 }
 
-/**
- * Estimate the deployment fee for a Braavos account
- * 
- * This function calculates the expected fee for deploying a Braavos account,
- * which is useful for funding the account before deployment.
- * 
- * @param {string} privateKey - The private key for the account
- * @param {RpcProvider} provider - Starknet RPC provider
- * @param {object} options - Transaction options (version, etc.)
- * @returns {Promise<EstimateFeeResponse>} The estimated deployment fee
- * 
- * @example
- * ```typescript
- * const provider = new RpcProvider({ nodeUrl: 'https://...' });
- * const fee = await estimateBraavosAccountDeployFee(privateKey, provider, {
- *   version: ETransactionVersion.V3
- * });
- * console.log('Deployment fee:', fee.overall_fee);
- * ```
- */
-export async function estimateBraavosAccountDeployFee(
-  privateKey: string,
-  provider: RpcProvider,
-  options: { version?: string } = {}
-): Promise<EstimateFeeResponse> {
-  const publicKey = ec.starkCurve.getStarkKey(privateKey);
-  const accountAddress = calculateAddressBraavos(privateKey);
-  
-  // Create a temporary account instance for fee estimation
-  const tempAccount = new Account(provider, accountAddress, privateKey);
-  
-  // Braavos account constructor calldata
-  const constructorCalldata = CallData.compile({
-    public_key: publicKey,
-    multisig_threshold: 1,
-  });
-  
-  // Create the deploy account transaction
-  const deployTx = {
-    classHash: BRAAVOS_ACCOUNT_CLASS_HASH,
+const BraavosConstructor = (starkKeyPubBraavos: string) =>
+  CallData.compile({ public_key: starkKeyPubBraavos });
+
+export function calculateAddressBraavos(
+  privateKeyBraavos: BigNumberish
+): string {
+  const starkKeyPubBraavos = ec.starkCurve.getStarkKey(
+    num.toHex(privateKeyBraavos)
+  );
+  const BraavosProxyConstructorCallData =
+    BraavosConstructor(starkKeyPubBraavos);
+  return hash.calculateContractAddressFromHash(
+    starkKeyPubBraavos,
+    BraavosBaseClassHash,
+    BraavosProxyConstructorCallData,
+    0
+  );
+}
+
+async function buildBraavosAccountDeployPayload(
+  privateKeyBraavos: BigNumberish,
+  {
+    classHash,
+    addressSalt,
     constructorCalldata,
-    contractAddress: accountAddress,
-    addressSalt: publicKey,
+    contractAddress: providedContractAddress,
+  }: DeployAccountContractPayload,
+  invocationDetails: V3InvocationsSignerDetails
+): Promise<DeployAccountContractTransaction> {
+  const compiledCalldata = CallData.compile(constructorCalldata ?? []);
+  const contractAddress =
+    providedContractAddress ?? calculateAddressBraavos(privateKeyBraavos);
+  const details: V3DeployAccountSignerDetails = {
+    classHash,
+    constructorCalldata: constructorCalldata ?? [],
+    addressSalt: addressSalt ?? 0,
+    contractAddress,
+    ...invocationDetails,
   };
-  
-  // Estimate the deployment fee
-  try {
-    // Note: estimateAccountDeployFee might not be available in all Starknet.js versions
-    // This is a placeholder implementation
-    const feeEstimate = {
-      overall_fee: '1000000000000000', // 0.001 STRK as default estimate
-      gas_consumed: '1000',
-      gas_price: '1000000000000',
-      unit: 'WEI' as const,
-      suggestedMaxFee: '1500000000000000' // 50% higher for safety
-    };
-    
-    return feeEstimate;
-  } catch (error) {
-    throw new Error(
-      `Failed to estimate Braavos account deployment fee: ${
-        error instanceof Error ? error.message : String(error)
-      }`
-    );
-  }
+  const signature = getBraavosSignature(details, privateKeyBraavos);
+  return {
+    classHash,
+    addressSalt,
+    constructorCalldata: compiledCalldata,
+    signature,
+  };
 }
 
-/**
- * Deploy a Braavos account to Starknet
- * 
- * This function handles the complete deployment process for a Braavos account,
- * including proper signature generation and transaction submission.
- * 
- * Prerequisites:
- * - The account address must be funded with sufficient STRK for fees
- * - The private key must be securely generated and stored
- * 
- * @param {string} privateKey - The private key for the account
- * @param {RpcProvider} provider - Starknet RPC provider
- * @param {object} options - Deployment options
- * @returns {Promise<InvokeFunctionResponse>} The deployment transaction response
- * 
- * @example
- * ```typescript
- * const provider = new RpcProvider({ nodeUrl: 'https://...' });
- * 
- * // Fund the account first
- * const accountAddress = calculateAddressBraavos(privateKey);
- * // ... fund accountAddress with STRK tokens ...
- * 
- * // Deploy the account
- * const result = await deployBraavosAccount(privateKey, provider);
- * console.log('Deployment hash:', result.transaction_hash);
- * console.log('Account address:', result.contract_address);
- * ```
- */
-export async function deployBraavosAccount(
-  privateKey: string,
+export async function estimateBraavosAccountDeployFee(
+  privateKeyBraavos: BigNumberish,
   provider: RpcProvider,
-  options: { 
-    maxFee?: string;
-    version?: string;
-  } = {}
-): Promise<InvokeFunctionResponse & { contract_address: string }> {
-  const publicKey = ec.starkCurve.getStarkKey(privateKey);
-  const accountAddress = calculateAddressBraavos(privateKey);
-  
-  try {
-    // Create account instance
-    const account = new Account(provider, accountAddress, privateKey);
-    
-    // Braavos account constructor calldata
-    const constructorCalldata = CallData.compile({
-      public_key: publicKey,
-      multisig_threshold: 1,
-    });
-    
-    // Deploy the account
-    const deployResponse = await account.deployAccount({
-      classHash: BRAAVOS_ACCOUNT_CLASS_HASH,
-      constructorCalldata,
-      addressSalt: publicKey,
-    }, {
-      maxFee: options.maxFee,
-      version: options.version || constants.TRANSACTION_VERSION.V3,
-    });
-    
-    return {
-      ...deployResponse,
-      contract_address: accountAddress,
-    };
-    
-  } catch (error) {
-    throw new Error(
-      `Failed to deploy Braavos account: ${
-        error instanceof Error ? error.message : String(error)
-      }`
+  { blockIdentifier, skipValidate, tip: tip0 }: EstimateFeeDetails
+): Promise<UniversalDetails> {
+  const tip = tip0 ?? 0n;
+  const EstimateVersion = ETransactionVersion.F3;
+  const nonce = constants.ZERO;
+  const chainId = await provider.getChainId();
+  const cairoVersion: CairoVersion = "1"; // dummy value, not used but mandatory
+  const starkKeyPubBraavos = ec.starkCurve.getStarkKey(
+    num.toHex(privateKeyBraavos)
+  );
+  const BraavosAccountAddress = calculateAddressBraavos(privateKeyBraavos);
+  const BraavosConstructorCallData = BraavosConstructor(starkKeyPubBraavos);
+
+  // transaction V3 for RPC0.8
+  const payload: DeployAccountContractTransaction =
+    await buildBraavosAccountDeployPayload(
+      privateKeyBraavos,
+      {
+        classHash: BraavosBaseClassHash.toString(),
+        addressSalt: starkKeyPubBraavos,
+        constructorCalldata: BraavosConstructorCallData,
+        contractAddress: BraavosAccountAddress,
+      },
+      {
+        chainId,
+        nonce,
+        version: EstimateVersion,
+        walletAddress: BraavosAccountAddress,
+        cairoVersion: cairoVersion,
+        tip,
+      } as V3InvocationsSignerDetails
     );
-  }
+  const v3det = stark.v3Details({}, "0.8.1");
+  const response: EstimateFeeResponse =
+    await provider.getDeployAccountEstimateFee(
+      {
+        classHash: BraavosBaseClassHash,
+        addressSalt: starkKeyPubBraavos,
+        constructorCalldata: BraavosConstructorCallData,
+        signature: payload.signature,
+      },
+      {
+        nonce,
+        version: EstimateVersion,
+        ...v3det,
+      } as V3TransactionDetails,
+      blockIdentifier,
+      skipValidate
+    );
+  const suggestedMaxFee = stark.estimateFeeToBounds({
+    ...response,
+    overall_fee: Number(response.overall_fee),
+    l1_gas_consumed: Number(response.l1_gas_consumed),
+    l1_gas_price: Number(response.l1_gas_price),
+    l2_gas_consumed: Number(response.l2_gas_consumed ?? 0n),
+    l2_gas_price: Number(response.l2_gas_price ?? 0n),
+    l1_data_gas_consumed: Number(response.l1_data_gas_consumed),
+    l1_data_gas_price: Number(response.l1_data_gas_price),
+  });
+  return {
+    resourceBounds: suggestedMaxFee,
+    feeDataAvailabilityMode: EDataAvailabilityMode.L1,
+    nonceDataAvailabilityMode: EDataAvailabilityMode.L1,
+    tip: 10 ** 13, // not handled in Starknet 0.13.5
+    paymasterData: [],
+  };
 }
 
-/**
- * Create a Braavos Account instance from an existing deployed account
- * 
- * This function creates an Account instance for an already deployed Braavos account,
- * which can be used for signing transactions and interacting with contracts.
- * 
- * @param {string} privateKey - The private key for the account
- * @param {string} accountAddress - The deployed account address
- * @param {RpcProvider} provider - Starknet RPC provider
- * @returns {Account} The configured Braavos account instance
- * 
- * @example
- * ```typescript
- * const provider = new RpcProvider({ nodeUrl: 'https://...' });
- * const account = createBraavosAccount(privateKey, accountAddress, provider);
- * 
- * // Use the account for transactions
- * const tx = await account.execute({
- *   contractAddress: '0x...',
- *   entrypoint: 'transfer',
- *   calldata: [recipient, amount_low, amount_high]
- * });
- * ```
- */
-export function createBraavosAccount(
-  privateKey: string,
-  accountAddress: string,
-  provider: RpcProvider
-): Account {
-  // Validate inputs
-  if (!privateKey || !accountAddress || !provider) {
-    throw new Error('Private key, account address, and provider are required');
-  }
-  
-  // Ensure addresses are properly formatted
-  const formattedAddress = num.getHexString(accountAddress);
-  const formattedPrivateKey = num.getHexString(privateKey);
-  
-  // Create and return the account instance
-  // Braavos accounts use the same Account class but with specific configurations
-  return new Account(provider, formattedAddress, formattedPrivateKey);
+type Version = typeof ETransactionVersion.V3 | typeof ETransactionVersion.F3;
+export function isV3tx(version: string): boolean {
+  return [ETransactionVersion.V3, ETransactionVersion.F3].includes(
+    version as Version
+  );
 }
 
-/**
- * Verify that an account is a Braavos account
- * 
- * This function checks if a given address corresponds to a Braavos account
- * by examining its class hash and implementation.
- * 
- * @param {string} accountAddress - The account address to check
- * @param {RpcProvider} provider - Starknet RPC provider
- * @returns {Promise<boolean>} True if the account is a Braavos account
- * 
- * @example
- * ```typescript
- * const provider = new RpcProvider({ nodeUrl: 'https://...' });
- * const isBraavos = await isBraavosAccount(accountAddress, provider);
- * 
- * if (isBraavos) {
- *   console.log('This is a Braavos account');
- * } else {
- *   console.log('This is not a Braavos account');
- * }
- * ```
- */
-export async function isBraavosAccount(
-  accountAddress: string,
-  provider: RpcProvider
-): Promise<boolean> {
-  try {
-    // Get the contract class hash
-    const contractClass = await provider.getClassHashAt(accountAddress);
-    
-    // Check if it matches known Braavos class hashes
-    return (
-      contractClass === BRAAVOS_ACCOUNT_CLASS_HASH ||
-      contractClass === BRAAVOS_PROXY_CLASS_HASH
+export async function deployBraavosAccount(
+  privateKeyBraavos: BigNumberish,
+  provider: RpcProvider,
+  maxFeeDetails?: UniversalDetails
+): Promise<DeployContractResponse> {
+  const nonce = constants.ZERO;
+  const chainId = await provider.getChainId();
+  const cairoVersion: CairoVersion = "1"; // dummy value, not used but mandatory
+  const starkKeyPubBraavos = ec.starkCurve.getStarkKey(
+    num.toHex(privateKeyBraavos)
+  );
+  const BraavosAccountAddress = calculateAddressBraavos(privateKeyBraavos);
+  const BraavosConstructorCallData = BraavosConstructor(starkKeyPubBraavos);
+  const feeDetails: UniversalDetails =
+    maxFeeDetails ??
+    (await estimateBraavosAccountDeployFee(privateKeyBraavos, provider, {}));
+  const txVersion = ETransactionVersion.V3;
+  const payload: DeployAccountContractTransaction =
+    await buildBraavosAccountDeployPayload(
+      privateKeyBraavos,
+      {
+        classHash: BraavosBaseClassHash.toString(),
+        addressSalt: starkKeyPubBraavos,
+        constructorCalldata: BraavosConstructorCallData,
+        contractAddress: BraavosAccountAddress,
+      },
+      {
+        chainId,
+        nonce,
+        version: txVersion,
+        walletAddress: BraavosAccountAddress,
+        cairoVersion: cairoVersion,
+        ...feeDetails,
+      } as V3InvocationsSignerDetails
     );
-  } catch (error) {
-    // If we can't get the class hash, assume it's not a Braavos account
-    console.warn('Could not verify account type:', error);
-    return false;
-  }
-}
-
-/**
- * Get account information for a Braavos account
- * 
- * This function retrieves detailed information about a Braavos account,
- * including its public key, multisig threshold, and other metadata.
- * 
- * @param {string} accountAddress - The Braavos account address
- * @param {RpcProvider} provider - Starknet RPC provider
- * @returns {Promise<object>} Account information object
- * 
- * @example
- * ```typescript
- * const provider = new RpcProvider({ nodeUrl: 'https://...' });
- * const info = await getBraavosAccountInfo(accountAddress, provider);
- * 
- * console.log('Public key:', info.publicKey);
- * console.log('Multisig threshold:', info.threshold);
- * ```
- */
-export async function getBraavosAccountInfo(
-  accountAddress: string,
-  provider: RpcProvider
-): Promise<{
-  publicKey: string;
-  threshold: number;
-  version: string;
-  classHash: string;
-}> {
-  try {
-    // Create a contract instance to call view functions
-    const contract = new Contract([], accountAddress, provider);
-    
-    // Get account information by calling view functions
-    // Note: These function names may vary based on Braavos implementation
-    const classHash = await provider.getClassHashAt(accountAddress);
-    
-    // For now, return basic information
-    // In a real implementation, you would call the actual Braavos contract methods
-    return {
-      publicKey: 'unknown', // Would need to call get_public_key()
-      threshold: 1, // Default multisig threshold
-      version: 'unknown', // Would need specific call to determine version
-      classHash: num.toHex(classHash),
-    };
-  } catch (error) {
-    throw new Error(
-      `Failed to get Braavos account info: ${
-        error instanceof Error ? error.message : String(error)
-      }`
-    );
-  }
+  return provider.deployAccountContract(
+    {
+      classHash: BraavosBaseClassHash,
+      addressSalt: starkKeyPubBraavos,
+      constructorCalldata: BraavosConstructorCallData,
+      signature: payload.signature,
+    },
+    {
+      nonce,
+      version: txVersion,
+      ...feeDetails,
+    }
+  );
 }
