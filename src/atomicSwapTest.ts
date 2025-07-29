@@ -4,6 +4,11 @@ import { createDefaultConfig } from "./atomicConfig";
 
 dotenv.config();
 
+const WBTC_ADDRESS =
+  "0x03fe2b97c1fd336e750087d68b9b867997fd64a2661ff3ca5a7c771641e8e7ac";
+const LIGHTNING_DESTINATION = "abdel@coinos.io";
+const TEST_AMOUNT = 400n;
+
 async function testWBTCAtomicSwap() {
   console.log("🔧 Starting WBTC Atomic Swap Test");
   console.log("================================");
@@ -53,18 +58,15 @@ async function testWBTCAtomicSwap() {
     let sourceToken: any;
     let tokenName = "Unknown";
 
-    const wbtcAddress =
-      "0x03fe2b97c1fd336e750087d68b9b867997fd64a2661ff3ca5a7c771641e8e7ac";
-
     if (swapperInstance.tokens && swapperInstance.tokens.STARKNET) {
       const starknetTokens = swapperInstance.tokens.STARKNET;
 
-      if (starknetTokens[wbtcAddress]) {
-        sourceToken = starknetTokens[wbtcAddress];
+      if (starknetTokens[WBTC_ADDRESS]) {
+        sourceToken = starknetTokens[WBTC_ADDRESS];
         tokenName = "WBTC";
-        console.log(`✅ Found WBTC token for testing (${wbtcAddress})`);
+        console.log(`✅ Found WBTC token for testing (${WBTC_ADDRESS})`);
       } else {
-        console.log(`❌ WBTC token not found at address ${wbtcAddress}`);
+        console.log(`❌ WBTC token not found at address ${WBTC_ADDRESS}`);
         console.log("Available tokens:", Object.keys(starknetTokens));
         throw new Error("WBTC token not available in the SDK");
       }
@@ -76,7 +78,7 @@ async function testWBTCAtomicSwap() {
 
     // Get BTC Lightning token
     const btcLnToken = tokens.BITCOIN.BTCLN;
-    console.log("✅ Found BTC Lightning token");
+    console.log("✅ Found BTC Lightning token: ", btcLnToken);
 
     // Check swap limits
     console.log("📊 Checking swap limits...");
@@ -107,21 +109,19 @@ async function testWBTCAtomicSwap() {
     console.log(
       `\n💱 Testing ${tokenName} -> Lightning swap quote creation...`
     );
-    const lightningDestination = "abdel@primal.net"; // LNURL-pay example
-    const testAmount = 400n;
 
     try {
       console.log(
-        `Creating swap quote for ${testAmount.toString()} ${tokenName} units -> Lightning`
+        `Creating swap quote for ${TEST_AMOUNT.toString()} ${tokenName} units -> Lightning`
       );
 
       const swap = await swapper.createSwapQuote(
         sourceToken, // Source token
         btcLnToken, // Destination: BTC on Lightning
-        testAmount, // Amount
+        TEST_AMOUNT, // Amount
         true, // exactIn: true
         swapper.getStarknetAddress(), // Source address
-        lightningDestination // LNURL-pay destination
+        LIGHTNING_DESTINATION // LNURL-pay destination
       );
 
       console.log("✅ Swap quote created successfully!");
@@ -219,7 +219,7 @@ async function testWBTCAtomicSwap() {
           console.log(`  - Final State: ${swap.getState()}`);
           console.log(`  - Lightning Payment Hash: ${secret || "N/A"}`);
           console.log(`  - Transaction ID: ${txId || "N/A"}`);
-          console.log(`  - Lightning Destination: ${lightningDestination}`);
+          console.log(`  - Lightning Destination: ${LIGHTNING_DESTINATION}`);
 
           return {
             success: true,
@@ -227,11 +227,11 @@ async function testWBTCAtomicSwap() {
             inputAmount: swap.getInputWithoutFee().toString(),
             outputAmount: swap.getOutput().toString(),
             tokenUsed: tokenName,
-            tokenAddress: wbtcAddress,
+            tokenAddress: WBTC_ADDRESS,
             finalState: swap.getState(),
             lightningPaymentHash: secret || null,
             transactionId: txId || null,
-            lightningDestination: lightningDestination,
+            lightningDestination: LIGHTNING_DESTINATION,
             message: `✅ WBTC -> Lightning atomic swap completed successfully!`,
           };
         } else {
