@@ -8,6 +8,7 @@ const WBTC_ADDRESS =
   "0x03fe2b97c1fd336e750087d68b9b867997fd64a2661ff3ca5a7c771641e8e7ac";
 const LIGHTNING_DESTINATION = "abdel@coinos.io";
 const TEST_AMOUNT = 400n;
+const EXACT_IN = false;
 
 async function testWBTCAtomicSwap() {
   console.log("🔧 Starting WBTC Atomic Swap Test");
@@ -119,7 +120,7 @@ async function testWBTCAtomicSwap() {
         sourceToken, // Source token
         btcLnToken, // Destination: BTC on Lightning
         TEST_AMOUNT, // Amount
-        true, // exactIn: true
+        EXACT_IN, // exactIn
         swapper.getStarknetAddress(), // Source address
         LIGHTNING_DESTINATION // LNURL-pay destination
       );
