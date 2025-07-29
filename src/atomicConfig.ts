@@ -49,7 +49,7 @@ export function createDefaultConfig(): AtomicSwapConfig {
     maxPricingDifferencePPM: BigInt(process.env.MAX_PRICING_DIFFERENCE_PPM || "20000"),
     defaultGasAmount: process.env.DEFAULT_GAS_AMOUNT ? BigInt(process.env.DEFAULT_GAS_AMOUNT) : BigInt("1000000000000000000"), // 1 STRK
     enableTestnet: process.env.ENABLE_TESTNET === "true",
-    useBraavosAccount: process.env.USE_BRAAVOS_ACCOUNT === "true"
+    useBraavosAccount: process.env.USE_BRAAVOS_ACCOUNT !== "false" // Default to true, set to "false" to disable
   };
 }
 
