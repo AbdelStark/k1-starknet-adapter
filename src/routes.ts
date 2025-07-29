@@ -570,7 +570,7 @@ router.post('/api/atomic-swap', async (req: Request, res: Response) => {
       success: true,
       swapId: swap.getId(),
       inputAmount: `${swap.getInputWithoutFee().toString()} ${(tokenInfo as any).ticker}`,
-      outputAmount: `${swap.getOutput().toString()} BTC`,
+      outputAmount: `${swap.getOutput().toString()} sats`,
       tokenUsed: (tokenInfo as any).ticker,
       tokenAddress: (tokenInfo as any).address,
       finalState: swap.getState(),

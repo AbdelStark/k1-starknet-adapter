@@ -1,3 +1,29 @@
+/**
+ * K1 Starknet Adapter - Atomic Swap Engine
+ * 
+ * This module provides the core atomic swap functionality for the K1 Starknet Adapter.
+ * It wraps the AtomiqLabs SDK to provide seamless integration between Starknet tokens
+ * and Bitcoin Lightning Network payments.
+ * 
+ * Key Features:
+ * - Support for both Braavos and OpenZeppelin wallet types
+ * - Automatic token discovery and validation
+ * - Production-ready error handling and logging
+ * - SQLite-based state management for swap persistence
+ * - Lightning Network integration with multiple destination formats
+ * 
+ * The AtomicSwapper class manages the complete lifecycle of atomic swaps:
+ * 1. Configuration validation and wallet initialization
+ * 2. Token discovery and swap quote creation
+ * 3. On-chain transaction execution and commitment
+ * 4. Lightning payment coordination and verification
+ * 5. Resource cleanup and state management
+ * 
+ * @fileoverview Core atomic swap functionality for Starknet-Lightning integration
+ * @author K1 Team
+ * @version 1.0.0
+ */
+
 import {
   AbstractSigner,
   IBitcoinWallet,
@@ -18,7 +44,17 @@ import {
 import { AtomicSwapConfig, validateConfig } from "./atomicConfig";
 
 /**
- * Wrapper class for AtomiqLabs SDK with Starknet integration
+ * AtomicSwapper - Production-ready wrapper for AtomiqLabs SDK
+ * 
+ * This class provides a high-level interface for executing atomic swaps between
+ * Starknet tokens and Bitcoin Lightning Network. It handles wallet management,
+ * transaction coordination, and error recovery.
+ * 
+ * Supports multiple wallet types:
+ * - Braavos wallets (default, recommended for existing users)
+ * - OpenZeppelin wallets (for new deployments)
+ * 
+ * Thread-safe design with proper resource management and cleanup.
  */
 export class AtomicSwapper {
   private config: AtomicSwapConfig;
