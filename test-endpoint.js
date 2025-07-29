@@ -45,10 +45,16 @@ async function testAtomicSwapEndpoint() {
       console.log(`Input: ${result.inputAmount}`);
       console.log(`Output: ${result.outputAmount}`);
       console.log(`Lightning Payment Hash: ${result.lightningPaymentHash}`);
+      console.log(`Request ID: ${result.requestId}`);
     } else {
       console.log('');
       console.log('❌ FAILED! Atomic swap unsuccessful');
-      console.log(`Error: ${result.message}`);
+      console.log(`Error Code: ${result.error?.code || 'UNKNOWN'}`);
+      console.log(`Error Message: ${result.error?.message || result.message}`);
+      console.log(`Request ID: ${result.error?.requestId || 'N/A'}`);
+      if (result.error?.details) {
+        console.log(`Details: ${result.error.details}`);
+      }
     }
 
   } catch (error) {
