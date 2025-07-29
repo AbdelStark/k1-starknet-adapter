@@ -130,4 +130,163 @@ router.get('/api/atomic-swap/status/:swapId', async (req: Request, res: Response
   }
 });
 
+// Direct atomic swap execution endpoint using AtomicSwapper
+router.post('/api/atomic-swap', async (req: Request, res: Response) => {
+  try {
+    const {
+      amountSats,
+      lightningDestination,
+      tokenAddress,
+      exactIn = false
+    } = req.body;
+
+    // Validate required fields
+    if (!amountSats || !lightningDestination || !tokenAddress) {
+      return res.status(400).json({
+        success: false,
+        message: 'Missing required fields: amountSats, lightningDestination, tokenAddress'
+      });
+    }
+
+    // Validate amount is a valid number
+    const amount = typeof amountSats === 'string' ? parseInt(amountSats) : Number(amountSats);
+    if (isNaN(amount) || amount <= 0) {
+      return res.status(400).json({
+        success: false,
+        message: 'amountSats must be a positive number'
+      });
+    }
+
+    console.log('🚀 Starting atomic swap execution via REST API');
+    console.log('Request parameters:', {
+      amountSats: amount.toString(),
+      lightningDestination,
+      tokenAddress,
+      exactIn
+    });
+
+    // Dynamic import to avoid circular dependencies
+    const { AtomicSwapper } = await import('./atomicSwapper');
+    const { createDefaultConfig } = await import('./atomicConfig');
+
+    // Create configuration
+    const config = createDefaultConfig();
+    
+    // Initialize AtomicSwapper
+    const swapper = new AtomicSwapper(config);
+    await swapper.initialize();
+    
+    console.log('✅ AtomicSwapper initialized');
+    console.log(`Starknet wallet address: ${swapper.getStarknetAddress()}`);
+
+    // Get available tokens to find the token info
+    const tokens = swapper.getAvailableTokens();
+    const starknetTokens = Object.values(tokens.STARKNET || {});
+    const tokenInfo = starknetTokens.find((t: any) => t.address === tokenAddress);
+    
+    if (!tokenInfo) {
+      await swapper.stop();
+      return res.status(400).json({
+        success: false,
+        message: `Token not found for address: ${tokenAddress}`
+      });
+    }
+
+    // Find Lightning BTC token
+    const lightningToken = Object.values(tokens.BITCOIN || {}).find((t: any) => t.lightning === true);
+    if (!lightningToken) {
+      await swapper.stop();
+      return res.status(400).json({
+        success: false,
+        message: 'Lightning BTC token not available'
+      });
+    }
+
+    console.log(`Using token: ${(tokenInfo as any).ticker} (${(tokenInfo as any).address})`);
+    console.log(`Lightning destination: ${lightningDestination}`);
+
+    // Create swap quote (Starknet token -> Lightning BTC)
+    console.log('💱 Creating swap quote...');
+    const swap = await swapper.createSwapQuote(
+      tokenInfo,        // Source token (Starknet token)
+      lightningToken,   // Destination token (Lightning BTC)
+      BigInt(amount),   // Amount
+      exactIn,          // exactIn
+      swapper.getStarknetAddress(), // Source address
+      lightningDestination          // Destination address
+    );
+
+    console.log('✅ Swap quote created successfully!');
+    console.log(`Swap ID: ${swap.getId()}`);
+    console.log(`Input Amount: ${swap.getInputWithoutFee().toString()}`);
+    console.log(`Output Amount: ${swap.getOutput().toString()}`);
+
+    // Execute the atomic swap following the same pattern as the test
+    console.log('🚀 Executing atomic swap...');
+    console.log('This is a Starknet -> Lightning swap, so we:');
+    console.log('1. Commit the swap on Starknet');
+    console.log('2. Wait for Lightning payment to complete');
+
+    const signer = swapper.getStarknetSigner();
+    console.log(`Using signer address: ${signer.getAddress()}`);
+
+    // Step 1: Commit the swap on Starknet
+    console.log('📝 Step 1: Committing swap on Starknet...');
+    await swap.commit(signer);
+    console.log('✅ Swap committed successfully on Starknet');
+    console.log(`Current swap state: ${swap.getState()}`);
+
+    // Step 2: Wait for Lightning payment
+    console.log('⚡ Step 2: Waiting for Lightning payment...');
+    console.log('The intermediary should now process the Lightning payment...');
+
+    const paymentReceived = await swap.waitForPayment();
+
+    if (!paymentReceived) {
+      await swapper.stop();
+      return res.status(408).json({
+        success: false,
+        message: 'Lightning payment not received within timeout',
+        swapId: swap.getId(),
+        finalState: swap.getState()
+      });
+    }
+
+    console.log('✅ Lightning payment received successfully!');
+    console.log(`Final swap state: ${swap.getState()}`);
+
+    // Get additional swap details
+    const secret = swap.getSecret?.();
+    const txId = swap.getTransactionId?.();
+
+    const swapResult = {
+      success: true,
+      swapId: swap.getId(),
+      inputAmount: `${swap.getInputWithoutFee().toString()} ${(tokenInfo as any).ticker}`,
+      outputAmount: `${swap.getOutput().toString()} BTC`,
+      tokenUsed: (tokenInfo as any).ticker,
+      tokenAddress: (tokenInfo as any).address,
+      finalState: swap.getState(),
+      lightningPaymentHash: secret || null,
+      transactionId: txId || null,
+      lightningDestination: lightningDestination,
+      message: `✅ ${(tokenInfo as any).ticker} -> Lightning atomic swap completed successfully!`
+    };
+    
+    // Stop the swapper
+    await swapper.stop();
+
+    // Return successful response
+    return res.json(swapResult);
+
+  } catch (error) {
+    console.error('Error in atomic swap execution:', error);
+    return res.status(500).json({
+      success: false,
+      message: error instanceof Error ? error.message : 'Unknown error occurred',
+      error: process.env.NODE_ENV === 'development' ? error : undefined
+    });
+  }
+});
+
 export default router;
