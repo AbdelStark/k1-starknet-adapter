@@ -10,6 +10,7 @@ import {
   StarknetKeypairWallet,
   StarknetSigner,
 } from "@atomiqlabs/chain-starknet";
+import { StarknetBraavosWallet } from "./braavos/StarknetBraavosWallet";
 import {
   SqliteStorageManager,
   SqliteUnifiedStorage,
@@ -179,10 +180,11 @@ export class AtomicSwapper {
         nodeUrl: this.config.starknetRpcUrl,
       });
 
-      // Create a Braavos account instance and wrap it with StarknetKeypairWallet
-      const braavosWallet = new StarknetKeypairWallet(
+      // Create a Braavos account instance using StarknetBraavosWallet
+      const braavosWallet = new StarknetBraavosWallet(
         starknetRpc,
-        braavosPrivateKey
+        braavosPrivateKey,
+        braavosAccountAddress
       );
 
       // Create the StarknetSigner with the Braavos wallet
@@ -234,7 +236,7 @@ export class AtomicSwapper {
         );
       }
 
-      const braavosWallet = new StarknetKeypairWallet(starknetRpc, privateKey);
+      const braavosWallet = new StarknetBraavosWallet(starknetRpc, privateKey, accountAddress);
       this.starknetSigner = new StarknetSigner(braavosWallet);
 
       console.log(
