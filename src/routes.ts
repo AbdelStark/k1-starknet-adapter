@@ -1,3 +1,24 @@
+/**
+ * API Routes for K1 Starknet Adapter
+ * 
+ * This module defines all HTTP endpoints for the K1 Starknet Adapter API,
+ * including atomic swap operations, balance queries, and system health checks.
+ * 
+ * The API provides:
+ * - Atomic swap execution between Starknet and Lightning Network
+ * - Balance queries for Starknet token addresses
+ * - Lightning invoice generation
+ * - System health monitoring
+ * - Proper error handling and request tracking
+ * 
+ * All endpoints include comprehensive logging and structured error responses
+ * with request IDs for debugging and monitoring.
+ * 
+ * @fileoverview API Route Definitions
+ * @author K1 Team
+ * @version 1.0.0
+ */
+
 import { Router, Request, Response } from 'express';
 import { BalanceService } from './balanceService';
 import { InvoiceDTO, ResultDTO, AtomicSwapRequest } from './types';
@@ -6,7 +27,21 @@ import { logSwapStart, logSwapSuccess, logSwapFailure, createSwapLogger } from '
 const router = Router();
 const balanceService = new BalanceService();
 
-// Health check endpoint
+/**
+ * Health Check Endpoint
+ * 
+ * Returns comprehensive system health information including uptime,
+ * memory usage, environment details, and service status.
+ * 
+ * @route GET /health
+ * @returns {Object} Health status object with system metrics
+ * @returns {string} returns.status - "healthy" if system is operational
+ * @returns {string} returns.timestamp - ISO timestamp of the health check
+ * @returns {number} returns.uptime - Process uptime in seconds
+ * @returns {Object} returns.memory - Node.js memory usage statistics
+ * @returns {string} returns.environment - Current NODE_ENV value
+ * @returns {string} returns.version - Application version
+ */
 router.get('/health', (req: Request, res: Response) => {
   req.logger.info('Health check requested');
   
@@ -22,7 +57,34 @@ router.get('/health', (req: Request, res: Response) => {
   return res.json(healthData);
 });
 
-// WBTC Balance endpoint
+/**
+ * WBTC Balance Query Endpoint
+ * 
+ * Retrieves the WBTC (Wrapped Bitcoin) balance for a given Starknet address.
+ * Validates the address format and returns structured balance information.
+ * 
+ * @route GET /balance/:address
+ * @param {string} address - Starknet address (must start with 0x)
+ * @returns {Object} Balance response object
+ * @returns {boolean} returns.success - Operation success status
+ * @returns {string} returns.message - Human-readable result message
+ * @returns {Object} returns.data - Balance data including address and amounts
+ * @returns {Object} returns.error - Error information if request fails
+ * 
+ * @example
+ * GET /balance/0x03641aa25b8de4a4d5ac185c72b124546666f2ad2354c9627b6565830fdea408
+ * 
+ * Success Response:
+ * {
+ *   "success": true,
+ *   "message": "WBTC balance retrieved successfully",
+ *   "data": {
+ *     "address": "0x03641aa25b8de4a4d5ac185c72b124546666f2ad2354c9627b6565830fdea408",
+ *     "balance": "1000000",
+ *     "formattedBalance": "0.01 WBTC"
+ *   }
+ * }
+ */
 router.get('/balance/:address', async (req: Request, res: Response) => {
   try {
     const { address } = req.params;
@@ -234,7 +296,67 @@ router.get('/api/atomic-swap/status/:swapId', async (req: Request, res: Response
   }
 });
 
-// Direct atomic swap execution endpoint using AtomicSwapper
+/**
+ * Atomic Swap Execution Endpoint
+ * 
+ * Executes an atomic swap between Starknet tokens and Bitcoin Lightning Network.
+ * This is the main endpoint for performing cross-chain atomic swaps with complete
+ * transaction coordination and error handling.
+ * 
+ * The swap process involves:
+ * 1. Validating input parameters and token availability
+ * 2. Initializing the AtomicSwapper with proper configuration
+ * 3. Executing the swap with timeout and error handling
+ * 4. Returning swap results or detailed error information
+ * 
+ * @route POST /api/atomic-swap
+ * @param {Object} body - Swap parameters
+ * @param {number} body.amountSats - Amount in satoshis to swap
+ * @param {string} body.lightningDestination - Lightning address or invoice destination
+ * @param {string} body.tokenAddress - Starknet token contract address (e.g., WBTC)
+ * @param {boolean} [body.exactIn=false] - Whether to use exact input amount
+ * 
+ * @returns {Object} Swap response object
+ * @returns {boolean} returns.success - Swap execution success status
+ * @returns {string} [returns.swapId] - Unique identifier for the swap transaction
+ * @returns {string} [returns.inputAmount] - Formatted input amount with token symbol
+ * @returns {string} [returns.outputAmount] - Formatted output amount
+ * @returns {string} [returns.lightningPaymentHash] - Lightning payment hash for verification
+ * @returns {string} [returns.requestId] - Request ID for debugging and tracking
+ * @returns {Object} [returns.error] - Detailed error information if swap fails
+ * 
+ * @example
+ * POST /api/atomic-swap
+ * Content-Type: application/json
+ * 
+ * {
+ *   "amountSats": 442,
+ *   "lightningDestination": "user@coinos.io",
+ *   "tokenAddress": "0x03fe2b97c1fd336e750087d68b9b867997fd64a2661ff3ca5a7c771641e8e7ac",
+ *   "exactIn": false
+ * }
+ * 
+ * Success Response:
+ * {
+ *   "success": true,
+ *   "swapId": "swap-abc123",
+ *   "inputAmount": "442 sats",
+ *   "outputAmount": "0.00000442 WBTC",
+ *   "lightningPaymentHash": "abc123...",
+ *   "requestId": "req-xyz789"
+ * }
+ * 
+ * Error Response:
+ * {
+ *   "success": false,
+ *   "error": {
+ *     "code": "TOKEN_NOT_FOUND",
+ *     "message": "Token not available for swapping",
+ *     "requestId": "req-xyz789",
+ *     "timestamp": "2025-01-01T00:00:00.000Z"
+ *   }
+ * }
+ */
 router.post('/api/atomic-swap', async (req: Request, res: Response) => {
   let swapId: string | undefined;
   let swapLogger: ReturnType<typeof createSwapLogger> | undefined;

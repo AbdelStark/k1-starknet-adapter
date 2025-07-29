@@ -161,6 +161,9 @@ export const validateRequestSizeMiddleware = (req: Request, res: Response, next:
 // Rate limiting helper (simple in-memory implementation)
 const rateLimitStore = new Map<string, { count: number; resetTime: number }>();
 
+// Export for testing purposes
+export { rateLimitStore };
+
 export const rateLimitMiddleware = (
   windowMs: number = 15 * 60 * 1000, // 15 minutes
   maxRequests: number = 100 // 100 requests per window
